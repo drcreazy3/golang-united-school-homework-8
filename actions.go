@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 )
@@ -24,14 +25,21 @@ func add(args Arguments, writer io.Writer) error {
 		return err
 	}
 
-	var items []Item
-	err = json.Unmarshal([]byte(args["item"]), &items)
+	var item Item
+	err = json.Unmarshal([]byte(args["item"]), &item)
 
 	if err != nil {
 		return err
 	}
 
-	records = append(records, items...)
+	for _, v := range records {
+		if v.Id == item.Id {
+			writer.Write([]byte(fmt.Sprintf("Item with id %v already exists", item.Id)))
+			return nil
+		}
+	}
+
+	records = append(records, item)
 
 	data, err := serialize(records)
 	if err != nil {
@@ -67,10 +75,63 @@ func findById(args Arguments, writer io.Writer) error {
 		return errors.New("-id flag has to be specified")
 	}
 
+	records, err := getRecords(args["fileName"])
+
+	if err != nil {
+		return err
+	}
+
+	for _, v := range records {
+		if v.Id == args["id"] {
+			record, err := json.Marshal(v)
+			if err != nil {
+				return err
+			}
+			writer.Write([]byte(record))
+			return nil
+		}
+	}
+
 	return nil
 }
 
 func remove(args Arguments, writer io.Writer) error {
+	if args["id"] == "" {
+		return errors.New("-id flag has to be specified")
+	}
+
+	records, err := getRecords(args["fileName"])
+
+	if err != nil {
+		return err
+	}
+
+	var newItems []Item
+	exists := false
+	for _, v := range records {
+		if v.Id == args["id"] {
+			exists = true
+			continue
+		}
+
+		newItems = append(newItems, v)
+	}
+
+	if exists == false {
+		writer.Write([]byte(fmt.Sprintf("Item with id %s not found", args["id"])))
+		return nil
+	}
+
+	data, err := serialize(newItems)
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(args["fileName"], data, 0755)
+	if err != nil {
+		panic(err)
+	}
+
 	return nil
 }
 
